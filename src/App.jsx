@@ -1,185 +1,97 @@
-import { useState, useEffect } from "react";
-import {
-  Authenticator,
-  Button,
-  Text,
-  TextField,
-  Heading,
-  Flex,
-  View,
-  Image,
-  Grid,
-  Divider,
-} from "@aws-amplify/ui-react";
-import { Amplify } from "aws-amplify";
-import "@aws-amplify/ui-react/styles.css";
-import { getUrl } from "aws-amplify/storage";
-import { uploadData } from "aws-amplify/storage";
-import { generateClient } from "aws-amplify/data";
-import outputs from "../amplify_outputs.json";
+import { useState, useRef } from "react";
+import "./App.css";
 
-/**
- * @type {import('aws-amplify/data').Client<import('../amplify/data/resource').Schema>}
- */
-
-Amplify.configure(outputs);
-const client = generateClient({
-  authMode: "userPool",
-});
+let nextId = 1;
 
 export default function App() {
   const [notes, setNotes] = useState([]);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageFile, setImageFile] = useState(null);
+  const formRef = useRef(null);
 
-  useEffect(() => {
-    fetchNotes();
-  }, []);
-
-  async function fetchNotes() {
-    const { data: notes } = await client.models.Note.list();
-    await Promise.all(
-      notes.map(async (note) => {
-        if (note.image) {
-          const linkToStorageFile = await getUrl({
-            path: ({ identityId }) => `media/${identityId}/${note.image}`,
-          });
-          console.log(linkToStorageFile.url);
-          note.image = linkToStorageFile.url;
-        }
-        return note;
-      })
-    );
-    console.log(notes);
-    setNotes(notes);
-  }
-
-  async function createNote(event) {
+  function createNote(event) {
     event.preventDefault();
-    const form = new FormData(event.target);
-    console.log(form.get("image").name);
 
-    const { data: newNote } = await client.models.Note.create({
-      name: form.get("name"),
-      description: form.get("description"),
-      image: form.get("image").name,
-    });
-
-    console.log(newNote);
-    if (newNote.image)
-      if (newNote.image)
-        await uploadData({
-          path: ({ identityId }) => `media/${identityId}/${newNote.image}`,
-          data: form.get("image"),
-        }).result;
-
-    fetchNotes();
-    event.target.reset();
-  }
-
-  async function deleteNote({ id }) {
-    const toBeDeletedNote = {
-      id: id,
+    const newNote = {
+      id: nextId++,
+      name,
+      description,
+      image: imageFile ? URL.createObjectURL(imageFile) : null,
     };
 
-    const { data: deletedNote } = await client.models.Note.delete(
-      toBeDeletedNote
-    );
-    console.log(deletedNote);
+    setNotes((prev) => [...prev, newNote]);
+    setName("");
+    setDescription("");
+    setImageFile(null);
+    formRef.current.reset();
+  }
 
-    fetchNotes();
+  function deleteNote(id) {
+    setNotes((prev) => prev.filter((note) => note.id !== id));
   }
 
   return (
-    <Authenticator>
-      {({ signOut }) => (
-        <Flex
-          className="App"
-          justifyContent="center"
-          alignItems="center"
-          direction="column"
-          width="70%"
-          margin="0 auto"
-        >
-          <Heading level={1}>My Notes App</Heading>
-          <View as="form" margin="3rem 0" onSubmit={createNote}>
-            <Flex
-              direction="column"
-              justifyContent="center"
-              gap="2rem"
-              padding="2rem"
-            >
-              <TextField
-                name="name"
-                placeholder="Note Name"
-                label="Note Name"
-                labelHidden
-                variation="quiet"
-                required
-              />
-              <TextField
-                name="description"
-                placeholder="Note Description"
-                label="Note Description"
-                labelHidden
-                variation="quiet"
-                required
-              />
-              <View
-                name="image"
-                as="input"
-                type="file"
-                alignSelf={"end"}
-                accept="image/png, image/jpeg"
-              />
+    <div className="app-wrapper">
+      <h1 className="app-title">My Notes App</h1>
 
-              <Button type="submit" variation="primary">
-                Create Note
-              </Button>
-            </Flex>
-          </View>
-          <Divider />
-          <Heading level={2}>Current Notes</Heading>
-          <Grid
-            margin="3rem 0"
-            autoFlow="column"
-            justifyContent="center"
-            gap="2rem"
-            alignContent="center"
-          >
-            {notes.map((note) => (
-              <Flex
-                key={note.id || note.name}
-                direction="column"
-                justifyContent="center"
-                alignItems="center"
-                gap="2rem"
-                border="1px solid #ccc"
-                padding="2rem"
-                borderRadius="5%"
-                className="box"
-              >
-                <View>
-                  <Heading level="3">{note.name}</Heading>
-                </View>
-                <Text fontStyle="italic">{note.description}</Text>
-                {note.image && (
-                  <Image
-                    src={note.image}
-                    alt={`visual aid for ${notes.name}`}
-                    style={{ width: 400 }}
-                  />
-                )}
-                <Button
-                  variation="destructive"
-                  onClick={() => deleteNote(note)}
-                >
-                  Delete note
-                </Button>
-              </Flex>
-            ))}
-          </Grid>
-          <Button onClick={signOut}>Sign Out</Button>
-        </Flex>
+      <form className="note-form" onSubmit={createNote} ref={formRef}>
+        <input
+          className="input"
+          type="text"
+          placeholder="Note Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+        <input
+          className="input"
+          type="text"
+          placeholder="Note Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          required
+        />
+        <input
+          className="file-input"
+          type="file"
+          accept="image/png, image/jpeg"
+          onChange={(e) => setImageFile(e.target.files[0] || null)}
+        />
+        <button className="btn btn-primary" type="submit">
+          Create Note
+        </button>
+      </form>
+
+      <hr className="divider" />
+
+      <h2 className="section-title">Current Notes</h2>
+
+      {notes.length === 0 && (
+        <p className="empty-state">No notes yet. Create one above!</p>
       )}
-    </Authenticator>
+
+      <div className="notes-grid">
+        {notes.map((note) => (
+          <div key={note.id} className="note-card">
+            <h3 className="note-name">{note.name}</h3>
+            <p className="note-description">{note.description}</p>
+            {note.image && (
+              <img
+                src={note.image}
+                alt={`visual aid for ${note.name}`}
+                className="note-image"
+              />
+            )}
+            <button
+              className="btn btn-danger"
+              onClick={() => deleteNote(note.id)}
+            >
+              Delete Note
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
